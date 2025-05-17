@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Previous CSS and Meta Tags -->
+</head>
+<body class="bg-light">
+
+<!-- Withdrawal Section (Updated) -->
+<div class="card mt-4">
+    <div class="card-body">
+        <h4>💸 Withdraw Earnings</h4>
+        <div class="mb-3">
+            <select id="withdrawMethod" class="form-select">
+                <option value="">Select Payment Method</option>
+                <option value="Easypaisa">Easypaisa</option>
+                <option value="JazzCash">JazzCash</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <input type="text" id="accountNumber" class="form-control" placeholder="Account Number">
+        </div>
+        <div class="mb-3">
+            <input type="number" id="withdrawAmount" class="form-control" placeholder="Amount (Min 50 PKR)" min="50">
+        </div>
+        <button class="btn btn-success w-100" onclick="processWithdrawal()">Submit Request</button>
+        <div id="withdrawStatus" class="mt-2 text-center"></div>
+    </div>
+</div>
+
+<script>
+// WhatsApp Integration
+async function sendWhatsAppAlert(withdrawalData) {
+    const twilioAccountSID = 'YOUR_TWILIO_SID';
+    const twilioAuthToken = 'YOUR_TWILIO_TOKEN';
+    const adminWhatsAppNo = '+923438220191'; // Your number
+
+    const messageBody = `📤 New Withdrawal Request:
+    
+User: ${currentUser.email}
+Amount: ${withdrawalData.amount} PKR
+Method: ${withdrawalData.method}
+Account: ${withdrawalData.account}`;
+
+    try {
+        const response = await fetch(
+            `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSID}/Messages.json`, 
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Basic ' + btoa(`${twilioAccountSID}:${twilioAuthToken}`),
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams({
+                    From: 'whatsapp:+14155238886', // Twilio's WhatsApp number
+                    To: `whatsapp:${adminWhatsAppNo}`,
+                    Body: messageBody
+                })
+            }
+        );
+        
+        if(!response.ok) throw new Error('Failed to send alert');
+    } catch(error) {
+        console.error('WhatsApp Alert Error:', error);
+    }
+}
+
+// Updated Withdrawal Process
+async function processWithdrawal() {
+    const withdrawalData = {
+        method: document.getElementById('withdrawMethod').value,
+        account: document.getElementById('accountNumber').value,
+        amount: document.getElementById('withdrawAmount').value,
+        status: 'pending' // Initial status
+    };
+
+    // Validation
+    if(!withdrawalData.method || !withdrawalData.account || !withdrawalData.amount) {
+        document.getElementById('withdrawStatus').innerHTML = 
+            '<div class="alert alert-danger">All fields are required!</div>';
+        return;
+    }
+
+    if(withdrawalData.amount < 50) {
+        document.getElementById('withdrawStatus').innerHTML = 
+            '<div class="alert alert-danger">Minimum withdrawal 50 PKR!</div>';
+        return;
+    }
+
+    if(currentUser.balance < withdrawalData.amount) {
+        document.getElementById('withdrawStatus').innerHTML = 
+            '<div class="alert alert-danger">Insufficient balance!</div>';
+        return;
+    }
+
+    // Send WhatsApp Alert
+    await sendWhatsAppAlert(withdrawalData);
+
+    // Store withdrawal request
+    const withdrawals = JSON.parse(localStorage.getItem('withdrawals')) || [];
+    withdrawals.push({
+        ...withdrawalData,
+        email: currentUser.email,
+        timestamp: new Date().toISOString()
+    });
+    localStorage.setItem('withdrawals', JSON.stringify(withdrawals));
+
+    document.getElementById('withdrawStatus').innerHTML = 
+        '<div class="alert alert-success">Request sent! Approval pending</div>';
+}
+
+// Admin Approval (Add this in admin panel)
+function approveWithdrawal(index) {
+    const withdrawals = JSON.parse(localStorage.getItem('withdrawals'));
+    if(!withdrawals[index]) return;
+
+    // Deduct balance
+    const userIndex = users.findIndex(u => u.email === withdrawals[index].email);
+    users[userIndex].balance -= withdrawals[index].amount;
+    users[userIndex].withdrawn += withdrawals[index].amount;
+    
+    // Update status
+    withdrawals[index].status = 'approved';
+    
+    localStorage.setItem('pakEarnUsers', JSON.stringify(users));
+    localStorage.setItem('withdrawals', JSON.stringify(withdrawals));
+}
+</script>
+</body>
+</html>
